@@ -18,3 +18,16 @@ yarn-error.log*
 coverage/
 .env.local
 .env.*.local
+
+# Windows OS files
+Thumbs.db
+Desktop.ini
+
+# Temporary files
+*.tmp
+*.temp
+
+# VS Code workspace files (keep shareable project config)
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
