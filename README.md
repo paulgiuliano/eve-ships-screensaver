@@ -146,6 +146,12 @@ This project now uses two maintained docs:
 - Increase camera distance
 - Use `ambient` preset with reduced lighting intensity
 
+## In-Game Tips (EVE Online)
+
+If this project is useful and you want to tip in-game ISK, you can send it to:
+
+- `Oskold Oskold`
+
 ## License
 
-MIT
+MIT. See [LICENSE](LICENSE).
