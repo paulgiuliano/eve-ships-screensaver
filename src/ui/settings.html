@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EVE Ships Screensaver - Settings</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            width: 100%;
+            min-height: 100vh;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            color: #e0e0e0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            padding: 12px;
+            overflow-x: hidden;
+            overflow-y: auto;
+        }
+
+        .container {
+            max-width: 500px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            font-size: 24px;
+            margin-bottom: 12px;
+            color: #64c8ff;
+            text-align: center;
+        }
+
+        .settings-group {
+            margin-bottom: 10px;
+            background: rgba(0, 0, 0, 0.3);
+            padding: 10px;
+            border-radius: 8px;
+            border-left: 3px solid #64c8ff;
+        }
+
+        .settings-group label {
+            display: block;
+            margin-bottom: 6px;
+            font-weight: 600;
+            color: #b0b0b0;
+            font-size: 13px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        input[type="range"] {
+            width: 100%;
+            height: 6px;
+            border-radius: 3px;
+            background: #404040;
+            outline: none;
+            -webkit-appearance: none;
+        }
+
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: #64c8ff;
+            cursor: pointer;
+            box-shadow: 0 0 10px rgba(100, 200, 255, 0.5);
+        }
+
+        input[type="range"]::-moz-range-thumb {
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: #64c8ff;
+            cursor: pointer;
+            box-shadow: 0 0 10px rgba(100, 200, 255, 0.5);
+            border: none;
+        }
+
+        .range-value {
+            display: inline-block;
+            background: #64c8ff;
+            color: #1a1a2e;
+            padding: 2px 8px;
+            border-radius: 3px;
+            font-size: 12px;
+            font-weight: bold;
+            margin-left: 10px;
+        }
+
+        select, input[type="color"], input[type="text"] {
+            width: 100%;
+            padding: 8px 12px;
+            background: #2a2a3e;
+            color: #e0e0e0;
+            border: 1px solid #404040;
+            border-radius: 4px;
+            font-size: 14px;
+            font-family: inherit;
+            cursor: pointer;
+        }
+
+        select:focus, input[type="color"]:focus, input[type="text"]:focus {
+            outline: none;
+            border-color: #64c8ff;
+            box-shadow: 0 0 5px rgba(100, 200, 255, 0.3);
+        }
+
+        input[type="color"] {
+            padding: 4px;
+            height: 40px;
+        }
+
+        .button-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 12px;
+        }
+
+        button {
+            flex: 1;
+            padding: 10px;
+            background: #64c8ff;
+            color: #1a1a2e;
+            border: none;
+            border-radius: 4px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        button:hover {
+            background: #50b8ff;
+            box-shadow: 0 0 10px rgba(100, 200, 255, 0.5);
+        }
+
+        button:active {
+            transform: scale(0.98);
+        }
+
+        .cancel-btn {
+            background: #404040;
+            color: #e0e0e0;
+        }
+
+        .cancel-btn:hover {
+            background: #505050;
+            box-shadow: none;
+        }
+
+        .info-text {
+            font-size: 12px;
+            color: #909090;
+            margin-top: 4px;
+            line-height: 1.2;
+        }
+
+        .status-text {
+            margin-top: 8px;
+            font-size: 12px;
+            color: #b0b0b0;
+            min-height: 1em;
+        }
+
+        .last-refresh-text {
+            margin-top: 4px;
+            font-size: 11px;
+            color: #909090;
+            min-height: 1em;
+        }
+
+        .status-text.success {
+            color: #7ee787;
+        }
+
+        .status-text.error {
+            color: #ff7b72;
+        }
+
+        .ship-selection {
+            background: #2a2a3e;
+            border: 1px solid #404040;
+            border-radius: 4px;
+            max-height: 200px;
+            overflow-y: auto;
+            padding: 10px;
+        }
+
+        .ship-item {
+            display: flex;
+            align-items: center;
+            padding: 8px;
+            margin-bottom: 5px;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 3px;
+            font-size: 12px;
+        }
+
+        .ship-item input[type="checkbox"] {
+            width: auto;
+            margin-right: 8px;
+        }
+
+        .preset-buttons {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 6px;
+            margin-top: 6px;
+        }
+
+        .preset-btn {
+            padding: 7px !important;
+            font-size: 12px !important;
+            background: #404040 !important;
+            color: #e0e0e0 !important;
+        }
+
+        .preset-btn:hover {
+            background: #505050 !important;
+        }
+
+        .preset-btn.active {
+            background: #64c8ff !important;
+            color: #1a1a2e !important;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>⚙️ Settings</h1>
+
+        <!-- Backdrop Color -->
+        <div class="settings-group">
+            <label for="backdrop-color">Backdrop Color</label>
+            <input type="color" id="backdrop-color" value="#1a1a2e">
+            <div class="info-text">Choose the background color for the display</div>
+        </div>
+
+        <!-- Rotation Speed -->
+        <div class="settings-group">
+            <label for="rotation-speed">
+                Rotation Speed
+                <span class="range-value" id="rotation-speed-display">2.0x</span>
+            </label>
+            <input type="range" id="rotation-speed" min="0.5" max="5" step="0.5" value="2">
+            <div class="info-text">How fast the ships rotate around the camera</div>
+        </div>
+
+        <!-- Lighting Preset -->
+        <div class="settings-group">
+            <label>Lighting Preset</label>
+            <div class="preset-buttons">
+                <button class="preset-btn" data-preset="bright">Bright</button>
+                <button class="preset-btn active" data-preset="ambient">Ambient</button>
+                <button class="preset-btn" data-preset="dramatic">Dramatic</button>
+                <button class="preset-btn" data-preset="dark">Dark</button>
+            </div>
+            <div class="info-text">Select the lighting ambiance for the display</div>
+        </div>
+
+        <!-- Lighting Intensity -->
+        <div class="settings-group">
+            <label for="lighting-intensity">
+                Lighting Intensity
+                <span class="range-value" id="lighting-intensity-display">1.0x</span>
+            </label>
+            <input type="range" id="lighting-intensity" min="0.2" max="2.5" step="0.1" value="1">
+            <div class="info-text">Scale the active lighting preset brighter or dimmer</div>
+        </div>
+
+        <!-- Camera Distance -->
+        <div class="settings-group">
+            <label for="camera-distance">
+                Camera Distance
+                <span class="range-value" id="camera-distance-display">50</span>
+            </label>
+            <input type="range" id="camera-distance" min="20" max="150" step="5" value="50">
+            <div class="info-text">How close or far the camera is from the ship</div>
+        </div>
+
+        <!-- Dynamic Camera Distance -->
+        <div class="settings-group">
+            <label>
+                <input type="checkbox" id="dynamic-camera-distance" checked> Auto-fit distance to ship size
+            </label>
+            <div class="info-text">Automatically adjusts distance per ship so small and large hulls stay similarly framed</div>
+        </div>
+
+        <!-- Camera Pattern -->
+        <div class="settings-group">
+            <label for="camera-pattern">Camera Pattern</label>
+            <select id="camera-pattern">
+                <option value="orbit">Orbit</option>
+                <option value="carousel">Carousel</option>
+                <option value="showcase">Showcase</option>
+                <option value="examine">Examine</option>
+            </select>
+            <div class="info-text">Choose how the camera moves around the ship</div>
+        </div>
+
+        <!-- Display Duration -->
+        <div class="settings-group">
+            <label for="display-duration">
+                Display Duration (seconds)
+                <span class="range-value" id="display-duration-display">10</span>
+            </label>
+            <input type="range" id="display-duration" min="5" max="60" step="5" value="10">
+            <div class="info-text">How long each ship is displayed before rotating</div>
+        </div>
+
+        <!-- Auto-rotate -->
+        <div class="settings-group">
+            <label>
+                <input type="checkbox" id="auto-rotate" checked> Auto-rotate camera
+            </label>
+            <div class="info-text">Automatically rotate the view around the ship</div>
+        </div>
+
+        <!-- Ship Metadata -->
+        <div class="settings-group">
+            <label for="refresh-ship-metadata">Ship Metadata</label>
+            <button id="refresh-ship-catalog-metadata" type="button">Refresh Ships and Names</button>
+            <button id="refresh-ship-metadata" type="button">Refresh Ship Names Only</button>
+            <div class="info-text">Force-refreshes the upstream ship ID-to-name index used by the overlay.</div>
+            <div id="refresh-status" class="status-text" aria-live="polite"></div>
+            <div id="refresh-last-updated" class="last-refresh-text" aria-live="polite"></div>
+        </div>
+
+        <!-- Action Buttons -->
+        <div class="button-group">
+            <button class="cancel-btn" onclick="window.electronAPI.closeSettings()">Close</button>
+        </div>
+    </div>
+
+    <script type="module" src="settings.js"></script>
+</body>
+</html>

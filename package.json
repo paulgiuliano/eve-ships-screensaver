@@ -1,0 +1,48 @@
+{
+  "name": "eve-ships-screensaver",
+  "version": "1.0.0",
+  "description": "A Windows screensaver displaying EVE Online ships with interactive lighting and backdrop options",
+  "main": "src/main.js",
+  "homepage": "./",
+  "type": "module",
+  "scripts": {
+    "start": "electron src/main.js",
+    "dev": "electron src/main.js --inspect",
+    "build": "electron-builder",
+    "build:win": "electron-builder --win --publish never"
+  },
+  "keywords": [
+    "screensaver",
+    "eve",
+    "3d",
+    "electron"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^28.0.0",
+    "electron-builder": "^24.6.4"
+  },
+  "dependencies": {
+    "three": "^0.158.0",
+    "electron-store": "^8.1.0"
+  },
+  "build": {
+    "appId": "com.eveships.screensaver",
+    "productName": "EVE Ships Screensaver",
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
+  }
+}
