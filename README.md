@@ -4,6 +4,14 @@ Electron-based Windows screensaver-style app that displays EVE Online ships in 3
 
 ![EVE Ships Screensaver preview](.github/images/screenshot.png)
 
+## Install (No npm Required)
+
+If you just want to use the screensaver, download and run the latest installer from Releases:
+
+- Latest release: https://github.com/paulgiuliano/eve-ships-screensaver/releases/latest
+- Download the Windows installer from the release assets
+- Run the installer and select **EVE Ships Screensaver** in Windows Screen Saver settings
+
 ## Quick Start
 
 ```bash
