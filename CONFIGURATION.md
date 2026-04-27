@@ -83,7 +83,7 @@ Allowed values:
 
 Settings window actions:
 
-- `Refresh Ship Names`: refresh metadata map only.
+- `Refresh Ship Names Only`: refresh metadata map only.
 - `Refresh Ships and Names`: refresh model catalog + metadata and update active ship list.
 
 Cache behavior in main process:

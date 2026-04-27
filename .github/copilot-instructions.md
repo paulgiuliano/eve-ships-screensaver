@@ -42,8 +42,8 @@ npm run build:win       # Build Windows installer
 src/
 ├── main.js              # Electron main process
 ├── preload.cjs          # IPC security bridge
-├── ShipManager.js       # Ship loading and management
-├── CameraController.js  # Advanced camera animations
+├── ShipManager.js       # Legacy ship helper module
+├── CameraController.js  # Legacy camera helper module
 └── ui/
     ├── screensaver.html # Main display
     ├── screensaver.js   # 3D rendering logic
@@ -72,7 +72,9 @@ Settings are stored via electron-store and include:
 - `rotationSpeed` - Camera rotation multiplier (0.5-5)
 - `backdropColor` - Background hex color
 - `lightingPreset` - Lighting style (ambient/bright/dramatic/dark)
+- `lightingIntensity` - Lighting intensity multiplier (0.2-2.5)
 - `cameraDistance` - Camera zoom distance (20-150)
+- `dynamicCameraDistance` - Auto-fit distance by ship size toggle
 - `autoRotate` - Auto-rotation toggle
 - `displayDuration` - Time to show each ship (ms)
 - `cameraPattern` - Movement pattern (orbit/carousel/showcase/examine)
@@ -80,17 +82,18 @@ Settings are stored via electron-store and include:
 ## Development Guidelines
 
 1. **Code Style**: ES6 modules, use async/await
-2. **Three.js**: Using r158+ with CDN for GLTFLoader and OrbitControls
+2. **Three.js**: Using `three` package with vendored local addons in `src/ui/vendor/three/`
 3. **Electron IPC**: Always use preload.cjs for secure context-isolated communication
 4. **Performance**: Minimize draw calls, use efficient geometries
 5. **UI**: Responsive design, works at any resolution
 
 ## Key Files to Edit
 
-- **Add Ships**: Modify `ShipManager.js` `loadDefaultShips()` method
+- **Add Ships**: Update `main.js` gallery catalog handling and `LEGACY_DEFAULT_SHIPS` fallback list
 - **New Lighting**: Add presets in `screensaver.js` `applyLightingPreset()` method
-- **New Camera Pattern**: Add to `CameraController.js` update methods
+- **New Camera Pattern**: Add logic in `screensaver.js` `updatePatternCamera()` method
 - **Settings UI**: Modify `settings.html` and `settings.js`
+- **IPC Bridge/Handlers**: Modify `preload.cjs` and `main.js` handlers together
 
 ## Running and Testing
 
@@ -118,7 +121,7 @@ npm run build:win
 3. [ ] Custom animation patterns
 4. [ ] Audio/music integration
 5. [ ] Screenshot capture feature
-6. [ ] Ship information overlay
+6. [ ] Ship metadata detail panel (class/faction/role)
 
 ## Resources
 

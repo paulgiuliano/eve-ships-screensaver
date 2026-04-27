@@ -77,7 +77,7 @@ Caching behavior:
 
 Settings UI actions:
 
-- `Refresh Ship Names`: refreshes metadata map only
+- `Refresh Ship Names Only`: refreshes metadata map only
 - `Refresh Ships and Names`: refreshes model catalog + metadata and updates active ship list
 
 ## Model Source and Acknowledgement
@@ -102,13 +102,13 @@ Special thanks to the maintainers and contributors of EVE Model Gallery for coll
 src/
   main.js                Electron main process and IPC handlers
   preload.cjs            Context-isolated API bridge
-  ShipManager.js         Ship list helpers
-  CameraController.js    Camera pattern logic helpers
   ui/
     screensaver.html     Fullscreen renderer shell
     screensaver.js       Three.js scene, loading, animation
     settings.html        Settings UI
     settings.js          Settings UI logic
+  ShipManager.js         Legacy helper module (not on active runtime path)
+  CameraController.js    Legacy helper module (not on active runtime path)
 ```
 
 ## Documentation Layout
