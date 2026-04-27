@@ -21,6 +21,12 @@ Build Windows installer:
 npm run build:win
 ```
 
+Install as a Windows screensaver:
+
+1. Build and run the installer from `dist/`.
+2. The installer automatically registers `EVE Ships Screensaver.scr` in `C:\Windows\System32`.
+3. Open Screen Saver settings (`control desk.cpl,,1`) and choose **EVE Ships Screensaver**.
+
 ## What It Does
 
 - Loads ship models from the EVE Model Gallery (`_lite.glb` files).
@@ -33,6 +39,14 @@ npm run build:win
 - `ESC`: Exit screensaver window
 - Right-click: Open Settings
 - Menu -> File -> Settings: Open Settings
+
+## Windows Screensaver Launch Modes
+
+The app supports standard screensaver command-line modes:
+
+- `/s`: Start fullscreen screensaver mode
+- `/c`: Open settings/config window
+- `/p <HWND>`: Start preview-safe mode (compact window fallback)
 
 ## Settings Overview
 
@@ -65,6 +79,22 @@ Settings UI actions:
 
 - `Refresh Ship Names`: refreshes metadata map only
 - `Refresh Ships and Names`: refreshes model catalog + metadata and updates active ship list
+
+## Model Source and Acknowledgement
+
+This project does not include original ship assets created in this repository. Ship models and related index data are sourced from the EVE Model Gallery repository:
+
+- Source repository: https://github.com/EstamelGG/EVE_Model_Gallery
+- Model path pattern used by this app: `docs/models/*_lite.glb`
+- Metadata index files used by this app:
+  - `docs/statics/resources_index_en.json`
+  - `docs/statics/resources_index_zh.json`
+
+**Legal Notice:**
+EVE Online and all related IP, including ship designs, names, and assets, are owned by CCP Games hf. This project is an unofficial fan creation not affiliated with or endorsed by CCP Games.
+
+Acknowledgement:
+Special thanks to the maintainers and contributors of EVE Model Gallery for collecting, structuring, and publishing the model and metadata resources that make this screensaver possible.
 
 ## Project Structure
 

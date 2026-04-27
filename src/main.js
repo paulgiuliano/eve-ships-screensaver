@@ -39,6 +39,60 @@ const defaultSettings = {
   displayDuration: 10000, // milliseconds
 };
 
+function parseScreensaverLaunchMode(argv = process.argv) {
+  const args = Array.isArray(argv) ? argv.slice(1) : [];
+  let mode = 'app';
+  let previewHandle = null;
+
+  const normalizeArg = (rawArg) => {
+    if (typeof rawArg !== 'string') {
+      return '';
+    }
+
+    return rawArg.trim().replace(/^"+|"+$/g, '').toLowerCase();
+  };
+
+  for (let index = 0; index < args.length; index += 1) {
+    const rawArg = args[index];
+    if (typeof rawArg !== 'string') {
+      continue;
+    }
+
+    const arg = normalizeArg(rawArg);
+    if (!arg) {
+      continue;
+    }
+
+    if (arg === '/s' || arg === '-s' || arg.startsWith('/s:') || arg.startsWith('-s:')) {
+      mode = 'screensaver';
+      continue;
+    }
+
+    if (arg === '/c' || arg === '-c' || arg.startsWith('/c:') || arg.startsWith('-c:')) {
+      mode = 'config';
+      continue;
+    }
+
+    if (arg === '/p' || arg === '-p' || arg.startsWith('/p:') || arg.startsWith('-p:')) {
+      mode = 'preview';
+
+      const inlineHandle = arg.split(':')[1];
+      if (inlineHandle) {
+        previewHandle = inlineHandle;
+        continue;
+      }
+
+      const nextArg = normalizeArg(args[index + 1]);
+      if (nextArg) {
+        previewHandle = nextArg;
+        index += 1;
+      }
+    }
+  }
+
+  return { mode, previewHandle };
+}
+
 function areSameShipLists(firstList = [], secondList = []) {
   if (firstList.length !== secondList.length) {
     return false;
@@ -133,12 +187,20 @@ function extractShipMetadataFromIndex(indexData) {
 }
 
 async function fetchJsonWithGitHubHeaders(url) {
-  const response = await fetch(url, {
-    headers: {
-      'User-Agent': 'EVE-Ships-Screensaver',
-      Accept: 'application/vnd.github+json',
-    },
-  });
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 10000);
+  let response;
+  try {
+    response = await fetch(url, {
+      signal: controller.signal,
+      headers: {
+        'User-Agent': 'EVE-Ships-Screensaver',
+        Accept: 'application/vnd.github+json',
+      },
+    });
+  } finally {
+    clearTimeout(timeoutId);
+  }
 
   if (!response.ok) {
     throw new Error(`GitHub fetch failed for ${url} with status ${response.status}`);
@@ -199,12 +261,20 @@ async function getShipMetadataCatalog(forceRefresh = false) {
 }
 
 async function fetchGalleryShipCatalog() {
-  const response = await fetch(GALLERY_TREE_API_URL, {
-    headers: {
-      'User-Agent': 'EVE-Ships-Screensaver',
-      Accept: 'application/vnd.github+json',
-    },
-  });
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 10000);
+  let response;
+  try {
+    response = await fetch(GALLERY_TREE_API_URL, {
+      signal: controller.signal,
+      headers: {
+        'User-Agent': 'EVE-Ships-Screensaver',
+        Accept: 'application/vnd.github+json',
+      },
+    });
+  } finally {
+    clearTimeout(timeoutId);
+  }
 
   if (!response.ok) {
     throw new Error(`GitHub API request failed with status ${response.status}`);
@@ -258,40 +328,77 @@ async function getOrCreateStore() {
     store.set('settings', defaultSettings);
   }
 
-  const saved = { ...defaultSettings, ...store.get('settings') };
+  const persistedSettings = store.get('settings');
+  const safePersistedSettings = persistedSettings && typeof persistedSettings === 'object' ? persistedSettings : {};
+  const saved = { ...defaultSettings, ...safePersistedSettings };
   const shouldUseGalleryCatalog = !Array.isArray(saved.ships) || saved.ships.length === 0 || areSameShipLists(saved.ships, LEGACY_DEFAULT_SHIPS);
 
   if (shouldUseGalleryCatalog) {
-    saved.ships = await getAvailableShipsCatalog();
+    // Use cached catalog synchronously to avoid blocking startup on network access.
+    // A fresh background refresh will push updated ships to the window when ready.
+    const cachedCatalog = store.get(SHIP_CATALOG_CACHE_KEY);
+    if (Array.isArray(cachedCatalog?.ships) && cachedCatalog.ships.length > 0) {
+      saved.ships = cachedCatalog.ships;
+    } else {
+      saved.ships = LEGACY_DEFAULT_SHIPS;
+    }
+
+    // Kick off a background refresh without awaiting it
+    getAvailableShipsCatalog().then((ships) => {
+      const current = { ...defaultSettings, ...store.get('settings') };
+      if (!areSameShipLists(current.ships, ships)) {
+        current.ships = ships;
+        store.set('settings', current);
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('settings-updated', current);
+        }
+      }
+    }).catch(() => { /* silent — catalog refresh is best-effort */ });
   }
 
   store.set('settings', saved);
   return saved;
 }
 
-function createMainWindow() {
+function createMainWindow(options = {}) {
+  const {
+    fullscreen = true,
+    preview = false,
+    skipTaskbar = true,
+    alwaysOnTop = false,
+    focusWindow = false,
+  } = options;
+
   mainWindow = new BrowserWindow({
-    width: 1920,
-    height: 1080,
-    fullscreen: true,
+    width: preview ? 480 : 1920,
+    height: preview ? 270 : 1080,
+    fullscreen,
     autoHideMenuBar: true,
-    skipTaskbar: true,
-    resizable: false,
-    movable: false,
+    skipTaskbar,
+    resizable: preview,
+    alwaysOnTop,
+    movable: preview,
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
       nodeIntegration: false,
       contextIsolation: true,
     },
-    frame: false,
+    frame: preview,
   });
 
   mainWindow.loadFile(path.join(__dirname, 'ui', 'screensaver.html'));
 
-  // Enforce fullscreen after the renderer is ready.
+  // Enforce fullscreen and optionally foreground focus after renderer is ready.
   mainWindow.once('ready-to-show', () => {
-    if (!mainWindow?.isDestroyed()) {
-      mainWindow.setFullScreen(true);
+    if (focusWindow && !mainWindow?.isDestroyed()) {
+      mainWindow.show();
+      mainWindow.focus();
+    }
+
+    if (fullscreen) {
+      if (!mainWindow?.isDestroyed()) {
+        mainWindow.setFullScreen(true);
+      }
     }
   });
 
@@ -304,7 +411,12 @@ function createMainWindow() {
   });
 }
 
-function createSettingsWindow() {
+function createSettingsWindow(options = {}) {
+  const {
+    alwaysOnTop = false,
+    focusWindow = true,
+  } = options;
+
   if (settingsWindow) {
     settingsWindow.focus();
     return;
@@ -314,6 +426,7 @@ function createSettingsWindow() {
     width: 600,
     height: 920,
     resizable: false,
+    alwaysOnTop,
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
       nodeIntegration: false,
@@ -323,14 +436,53 @@ function createSettingsWindow() {
 
   settingsWindow.loadFile(path.join(__dirname, 'ui', 'settings.html'));
 
+  settingsWindow.once('ready-to-show', () => {
+    if (focusWindow && !settingsWindow?.isDestroyed()) {
+      settingsWindow.show();
+      settingsWindow.focus();
+    }
+  });
+
   settingsWindow.on('closed', () => {
     settingsWindow = null;
   });
 }
 
 app.on('ready', () => {
-  createMainWindow();
-  createMenu();
+  const { mode, previewHandle } = parseScreensaverLaunchMode();
+
+  if (mode === 'config') {
+    createSettingsWindow({
+      alwaysOnTop: true,
+      focusWindow: true,
+    });
+    return;
+  }
+
+  if (mode === 'preview') {
+    // Electron cannot reliably embed into the Win32 preview host handle,
+    // so we run a compact preview-safe window instead of crashing.
+    console.log(`Launching preview mode (host handle: ${previewHandle || 'none'})`);
+    createMainWindow({
+      fullscreen: false,
+      preview: true,
+      skipTaskbar: false,
+      alwaysOnTop: true,
+      focusWindow: true,
+    });
+    return;
+  }
+
+  const shouldRunFullscreen = mode === 'screensaver' || mode === 'app';
+  createMainWindow({
+    fullscreen: shouldRunFullscreen,
+    preview: false,
+  });
+
+  // Keep the menu for normal app launches, but hide it for screensaver mode.
+  if (mode === 'app') {
+    createMenu();
+  }
 });
 
 app.on('window-all-closed', () => {
@@ -362,8 +514,15 @@ function createMenu() {
 }
 
 // IPC handlers
-ipcMain.handle('get-settings', () => {
-  return getOrCreateStore();
+ipcMain.handle('get-settings', async () => {
+  try {
+    return await getOrCreateStore();
+  } catch (error) {
+    console.error('Failed to get settings, resetting to defaults:', error);
+    const fallback = { ...defaultSettings };
+    store.set('settings', fallback);
+    return fallback;
+  }
 });
 
 ipcMain.handle('save-settings', (event, settings) => {
@@ -453,5 +612,8 @@ ipcMain.handle('close-settings', () => {
 });
 
 ipcMain.handle('open-settings', () => {
-  createSettingsWindow();
+  createSettingsWindow({
+    alwaysOnTop: true,
+    focusWindow: true,
+  });
 });

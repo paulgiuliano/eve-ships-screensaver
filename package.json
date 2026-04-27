@@ -31,6 +31,7 @@
     "appId": "com.eveships.screensaver",
     "productName": "EVE Ships Screensaver",
     "win": {
+      "signAndEditExecutable": false,
       "target": [
         {
           "target": "nsis",
@@ -42,7 +43,10 @@
     },
     "nsis": {
       "oneClick": false,
-      "allowToChangeInstallationDirectory": true
+      "allowToChangeInstallationDirectory": true,
+      "perMachine": true,
+      "include": "build/installer.nsh",
+      "runAfterFinish": true
     }
   }
 }

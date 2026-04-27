@@ -1,7 +1,7 @@
 import * as THREE from 'three';
-import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
-import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { GLTFLoader } from './vendor/three/loaders/GLTFLoader.js';
+import { DRACOLoader } from './vendor/three/loaders/DRACOLoader.js';
+import { OrbitControls } from './vendor/three/controls/OrbitControls.js';
 
 class ShipsScreensaver {
     constructor() {
@@ -13,8 +13,12 @@ class ShipsScreensaver {
         this.currentShipIndex = 0;
         this.settings = {};
         this.loader = new GLTFLoader();
+        
+        // Use a document-relative decoder path so dev and packaged modes resolve identically.
+        const dracoPath = './vendor/three/libs/draco/';
+        
         const dracoLoader = new DRACOLoader();
-        dracoLoader.setDecoderPath('../../node_modules/three/examples/jsm/libs/draco/');
+        dracoLoader.setDecoderPath(dracoPath);
         this.loader.setDRACOLoader(dracoLoader);
         this.shipRotation = 0;
         this.containerWidth = window.innerWidth;
@@ -30,12 +34,46 @@ class ShipsScreensaver {
         this.shipTransitionDurationMs = 900;
         this.cameraDistanceTransitionDurationMs = 900;
         this.cameraDistanceTransition = null;
+        this.lastSettingsOpenTime = 0;
         
         this.setupScene();
         this.setupLighting();
         this.loadSettings();
         this.setupEventListeners();
         this.animate();
+    }
+
+    getDefaultSettings() {
+        return {
+            ships: [
+                'https://raw.githubusercontent.com/EstamelGG/EVE_Model_Gallery/main/docs/models/587_lite.glb',
+                'https://raw.githubusercontent.com/EstamelGG/EVE_Model_Gallery/main/docs/models/603_lite.glb',
+                'https://raw.githubusercontent.com/EstamelGG/EVE_Model_Gallery/main/docs/models/626_lite.glb',
+                'https://raw.githubusercontent.com/EstamelGG/EVE_Model_Gallery/main/docs/models/629_lite.glb',
+                'https://raw.githubusercontent.com/EstamelGG/EVE_Model_Gallery/main/docs/models/24698_lite.glb',
+            ],
+            rotationSpeed: 2,
+            backdropColor: '#1a1a2e',
+            lightingPreset: 'ambient',
+            lightingIntensity: 1,
+            cameraDistance: 50,
+            dynamicCameraDistance: true,
+            cameraPattern: 'orbit',
+            autoRotate: true,
+            displayDuration: 10000,
+        };
+    }
+
+    normalizeSettings(settings) {
+        const defaults = this.getDefaultSettings();
+        const safeSettings = settings && typeof settings === 'object' ? settings : {};
+        const merged = { ...defaults, ...safeSettings };
+
+        if (!Array.isArray(merged.ships)) {
+            merged.ships = defaults.ships;
+        }
+
+        return merged;
     }
 
     setupScene() {
@@ -59,7 +97,7 @@ class ShipsScreensaver {
         this.renderer.setPixelRatio(window.devicePixelRatio);
         this.renderer.setClearColor(0x1a1a2e);
         this.renderer.shadowMap.enabled = true;
-        this.renderer.shadowMap.type = THREE.PCFShadowShadowMap;
+        this.renderer.shadowMap.type = THREE.PCFShadowMap;
         container.appendChild(this.renderer.domElement);
 
         // Orbit controls (for demo purposes)
@@ -99,13 +137,33 @@ class ShipsScreensaver {
     }
 
     async loadSettings() {
-        try {
-            const [settings, shipMetadataByFilename] = await Promise.all([
-                window.electronAPI.getSettings(),
-                window.electronAPI.getShipMetadata(),
-            ]);
+        const api = window.electronAPI;
+        if (!api?.getSettings) {
+            this.settings = this.getDefaultSettings();
+            this.shipMetadataByFilename = {};
+            this.applySettings();
+            if (this.settings.ships.length > 0) {
+                this.currentShipIndex = Math.floor(Math.random() * this.settings.ships.length);
+                await this.loadShip(this.settings.ships[this.currentShipIndex]);
+                this.scheduleNextShip();
+            }
+            return;
+        }
 
-            this.settings = settings;
+        try {
+            // Fetch settings immediately; metadata with timeout to prevent indefinite blocking
+            const settings = await api.getSettings();
+
+            // Metadata failures should never block startup.
+            const metadataPromise = api.getShipMetadata
+                ? api.getShipMetadata().catch(() => ({}))
+                : Promise.resolve({});
+            const timeoutPromise = new Promise((resolve) => {
+                setTimeout(() => resolve({}), 5000);
+            });
+            const shipMetadataByFilename = await Promise.race([metadataPromise, timeoutPromise]);
+
+            this.settings = this.normalizeSettings(settings);
             this.shipMetadataByFilename = shipMetadataByFilename || {};
             this.applySettings();
             
@@ -119,27 +177,42 @@ class ShipsScreensaver {
             }
             
             // Listen for settings updates
-            window.electronAPI.onSettingsUpdated((settings) => {
-                const durationChanged = settings.displayDuration !== this.settings.displayDuration;
-                this.settings = settings;
-                this.applySettings();
-                if (durationChanged) this.scheduleNextShip();
-            });
+            if (api.onSettingsUpdated) {
+                api.onSettingsUpdated((settingsUpdate) => {
+                    const normalizedUpdate = this.normalizeSettings(settingsUpdate);
+                    const durationChanged = normalizedUpdate.displayDuration !== this.settings.displayDuration;
+                    this.settings = normalizedUpdate;
+                    this.applySettings();
+                    if (durationChanged) this.scheduleNextShip();
+                });
+            }
 
-            window.electronAPI.onShipMetadataUpdated((shipMetadataByFilename) => {
-                this.shipMetadataByFilename = shipMetadataByFilename || {};
+            if (api.onShipMetadataUpdated) {
+                api.onShipMetadataUpdated((shipMetadataByFilenameUpdate) => {
+                    this.shipMetadataByFilename = shipMetadataByFilenameUpdate || {};
 
-                if (this.settings?.ships && this.settings.ships.length > 0 && this.currentShipIndex >= 0) {
-                    const currentModelUrl = this.settings.ships[this.currentShipIndex];
-                    if (currentModelUrl) {
-                        const shipName = this.resolveShipDisplayName(currentModelUrl);
-                        document.getElementById('ship-name').textContent = `Ship: ${shipName}`;
+                    if (this.settings?.ships && this.settings.ships.length > 0 && this.currentShipIndex >= 0) {
+                        const currentModelUrl = this.settings.ships[this.currentShipIndex];
+                        if (currentModelUrl) {
+                            const shipName = this.resolveShipDisplayName(currentModelUrl);
+                            document.getElementById('ship-name').textContent = `Ship: ${shipName}`;
+                        }
                     }
-                }
-            });
+                });
+            }
         } catch (error) {
             console.error('Error loading settings:', error);
-            document.getElementById('ship-name').textContent = 'Error loading settings';
+            // Last-resort startup path with in-memory defaults.
+            this.settings = this.getDefaultSettings();
+            this.shipMetadataByFilename = {};
+            this.applySettings();
+            if (this.settings.ships.length > 0) {
+                this.currentShipIndex = Math.floor(Math.random() * this.settings.ships.length);
+                await this.loadShip(this.settings.ships[this.currentShipIndex]);
+                this.scheduleNextShip();
+            } else {
+                document.getElementById('ship-name').textContent = 'No ships configured';
+            }
         }
     }
 
@@ -358,7 +431,12 @@ class ShipsScreensaver {
         try {
             const previousShip = this.currentShip;
 
-            const gltf = await this.loader.loadAsync(modelUrl);
+            // Wrap loader in timeout to prevent preview from appearing permanently stuck.
+            const loadPromise = this.loader.loadAsync(modelUrl);
+            const timeoutPromise = new Promise((resolve, reject) => {
+                setTimeout(() => reject(new Error('Model load timeout')), 12000);
+            });
+            const gltf = await Promise.race([loadPromise, timeoutPromise]);
             const model = gltf.scene;
 
             // Scale and position the model
@@ -403,6 +481,10 @@ class ShipsScreensaver {
             return model;
         } catch (error) {
             console.error('Error loading ship:', error);
+            document.getElementById('ship-name').textContent = 'Failed to load ship model';
+            // Schedule next ship after brief delay so user can see the error
+            if (this.shipTimer) clearTimeout(this.shipTimer);
+            this.shipTimer = setTimeout(() => this.nextShip(), 2000);
         }
     }
 
@@ -505,12 +587,29 @@ class ShipsScreensaver {
         }
 
         const stripped = filename
-            .replace(/\.gltf?$/i, '')
+            .replace(/\.(?:gltf|glb)$/i, '')
             .replace(/_lite$/i, '')
             .replace(/_/g, ' ')
             .trim();
 
         return this.sanitizeShipDisplayName(stripped) || 'Unknown Ship';
+    }
+
+    openSettingsWindow() {
+        if (!window.electronAPI?.openSettings) {
+            return;
+        }
+
+        // Debounce to avoid duplicate open calls from overlapping right-click handlers.
+        const now = Date.now();
+        if ((now - this.lastSettingsOpenTime) < 300) {
+            return;
+        }
+
+        this.lastSettingsOpenTime = now;
+        window.electronAPI.openSettings().catch((error) => {
+            console.error('Failed to open settings window:', error);
+        });
     }
 
     sanitizeShipDisplayName(name) {
@@ -519,7 +618,7 @@ class ShipsScreensaver {
         }
 
         return name
-            .replace(/^\s*\d+\s*[-_:|]?\s*/, '')
+            .replace(/^\s*\d+\s*[-_:|]\s*/, '')
             .replace(/\s{2,}/g, ' ')
             .trim();
     }
@@ -545,12 +644,20 @@ class ShipsScreensaver {
 
         document.addEventListener('contextmenu', (e) => {
             e.preventDefault();
+            this.openSettingsWindow();
         });
 
-        // Right-click handler to open settings
+        document.addEventListener('mousedown', (e) => {
+            if (e.button === 2) {
+                e.preventDefault();
+                this.openSettingsWindow();
+            }
+        });
+
+        // Explicit canvas handler for environments where document-level contextmenu is suppressed.
         this.renderer.domElement.addEventListener('contextmenu', (e) => {
             e.preventDefault();
-            window.electronAPI.openSettings();
+            this.openSettingsWindow();
         });
 
         // Cleanup on window close
@@ -599,5 +706,13 @@ class ShipsScreensaver {
 
 // Initialize screensaver when page loads
 window.addEventListener('load', () => {
-    new ShipsScreensaver();
+    try {
+        new ShipsScreensaver();
+    } catch (error) {
+        console.error('Screensaver failed to initialize:', error);
+        const shipNameEl = document.getElementById('ship-name');
+        if (shipNameEl) {
+            shipNameEl.textContent = `Initialization failed: ${error.message}`;
+        }
+    }
 });

@@ -1,5 +1,10 @@
 let currentSettings = {};
 
+function getElectronAPI() {
+    const api = window.electronAPI;
+    return api && typeof api === 'object' ? api : null;
+}
+
 function setRefreshStatus(message, tone = '') {
     const statusEl = document.getElementById('refresh-status');
     if (!statusEl) {
@@ -29,11 +34,18 @@ function setLastRefreshTimestamp(timestampMs) {
 }
 
 async function loadSettings() {
+    const api = getElectronAPI();
+    if (!api?.getSettings) {
+        setRefreshStatus('Settings bridge unavailable. Restart the screensaver process.', 'error');
+        return;
+    }
+
     try {
-        currentSettings = await window.electronAPI.getSettings();
+        currentSettings = await api.getSettings();
         applySettingsToUI();
     } catch (error) {
         console.error('Error loading settings:', error);
+        setRefreshStatus(`Error loading settings: ${error.message}`, 'error');
     }
 }
 
@@ -150,6 +162,23 @@ function setupEventListeners() {
     if (refreshCatalogMetadataButton) {
         refreshCatalogMetadataButton.addEventListener('click', refreshShipCatalogAndMetadata);
     }
+
+    const closeButton = document.getElementById('close-settings');
+    if (closeButton) {
+        closeButton.addEventListener('click', async () => {
+            try {
+                if (window.electronAPI?.closeSettings) {
+                    await window.electronAPI.closeSettings();
+                    return;
+                }
+            } catch (error) {
+                console.error('Failed to close settings through main process:', error);
+            }
+
+            // Fallback for any unexpected bridge failure.
+            window.close();
+        });
+    }
 }
 
 async function refreshShipMetadata() {
@@ -159,14 +188,20 @@ async function refreshShipMetadata() {
         return;
     }
 
+    const api = getElectronAPI();
+    if (!api?.refreshShipMetadata || !api?.getSettings) {
+        setRefreshStatus('Refresh unavailable: settings bridge is not ready.', 'error');
+        return;
+    }
+
     refreshButton.disabled = true;
     setRefreshStatus('Refreshing ship metadata...');
 
     try {
-        const result = await window.electronAPI.refreshShipMetadata();
+        const result = await api.refreshShipMetadata();
         if (result?.success) {
             const count = Number.isFinite(result.entryCount) ? result.entryCount : 0;
-            currentSettings = await window.electronAPI.getSettings();
+            currentSettings = await api.getSettings();
             setRefreshStatus(`Ship metadata refreshed (${count} mapped models).`, 'success');
             setLastRefreshTimestamp(result.refreshedAt);
             return;
@@ -187,15 +222,21 @@ async function refreshShipCatalogAndMetadata() {
         return;
     }
 
+    const api = getElectronAPI();
+    if (!api?.refreshShipCatalogAndMetadata || !api?.getSettings) {
+        setRefreshStatus('Refresh unavailable: settings bridge is not ready.', 'error');
+        return;
+    }
+
     refreshButton.disabled = true;
     setRefreshStatus('Refreshing ship catalog and metadata...');
 
     try {
-        const result = await window.electronAPI.refreshShipCatalogAndMetadata();
+        const result = await api.refreshShipCatalogAndMetadata();
         if (result?.success) {
             const shipCount = Number.isFinite(result.shipCount) ? result.shipCount : 0;
             const metadataCount = Number.isFinite(result.metadataCount) ? result.metadataCount : 0;
-            currentSettings = await window.electronAPI.getSettings();
+            currentSettings = await api.getSettings();
             setRefreshStatus(`Catalog refreshed (${shipCount} ships, ${metadataCount} name mappings).`, 'success');
             setLastRefreshTimestamp(result.refreshedAt);
             return;
@@ -223,14 +264,21 @@ async function saveSettings() {
         ships: currentSettings.ships || [],
     };
 
+    const api = getElectronAPI();
+    if (!api?.saveSettings) {
+        setRefreshStatus('Save unavailable: settings bridge is not ready.', 'error');
+        return;
+    }
+
     try {
-        await window.electronAPI.saveSettings(settings);
+        await api.saveSettings(settings);
         currentSettings = settings;
         console.log('Settings saved successfully');
         // Optionally close the window after saving
-        // window.electronAPI.closeSettings();
+        // api.closeSettings();
     } catch (error) {
         console.error('Error saving settings:', error);
+        setRefreshStatus(`Error saving settings: ${error.message}`, 'error');
     }
 }
 
