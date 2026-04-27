@@ -2,6 +2,8 @@
 
 Electron-based Windows screensaver-style app that displays EVE Online ships in 3D using Three.js, with configurable camera and lighting behavior.
 
+![EVE Ships Screensaver preview](.github/images/screenshot.png)
+
 ## Quick Start
 
 ```bash
