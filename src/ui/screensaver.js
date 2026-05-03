@@ -27,6 +27,8 @@ class ShipsScreensaver {
         this.shipMetadataByFilename = {};
         this.shipRotationAxis = new THREE.Vector3(0, 1, 0); // Rotate around Y axis
         this.shipTimer = null;
+        this.flyingShips = [];
+        this.activeModeLoadToken = 0;
         this.cameraAnimationTime = 0;
         this.lastFrameTime = performance.now();
         this.currentShipRadius = 10;
@@ -144,7 +146,7 @@ class ShipsScreensaver {
             this.applySettings();
             if (this.settings.ships.length > 0) {
                 this.currentShipIndex = Math.floor(Math.random() * this.settings.ships.length);
-                await this.loadShip(this.settings.ships[this.currentShipIndex]);
+                await this.loadCurrentModeContent();
                 this.scheduleNextShip();
             }
             return;
@@ -170,7 +172,7 @@ class ShipsScreensaver {
             // Load initial ship if available
             if (this.settings.ships && this.settings.ships.length > 0) {
                 this.currentShipIndex = Math.floor(Math.random() * this.settings.ships.length);
-                await this.loadShip(this.settings.ships[this.currentShipIndex]);
+                await this.loadCurrentModeContent();
                 this.scheduleNextShip();
             } else {
                 document.getElementById('ship-name').textContent = 'No ships configured';
@@ -179,10 +181,20 @@ class ShipsScreensaver {
             // Listen for settings updates
             if (api.onSettingsUpdated) {
                 api.onSettingsUpdated((settingsUpdate) => {
+                    const previousPattern = this.settings?.cameraPattern || 'orbit';
+                    const previousShips = Array.isArray(this.settings?.ships) ? this.settings.ships : [];
                     const normalizedUpdate = this.normalizeSettings(settingsUpdate);
                     const durationChanged = normalizedUpdate.displayDuration !== this.settings.displayDuration;
+                    const patternChanged = normalizedUpdate.cameraPattern !== previousPattern;
+                    const shipsChanged = !this.areShipListsEqual(previousShips, normalizedUpdate.ships || []);
                     this.settings = normalizedUpdate;
                     this.applySettings();
+
+                    if (patternChanged || shipsChanged) {
+                        this.refreshModeContent();
+                        return;
+                    }
+
                     if (durationChanged) this.scheduleNextShip();
                 });
             }
@@ -208,7 +220,7 @@ class ShipsScreensaver {
             this.applySettings();
             if (this.settings.ships.length > 0) {
                 this.currentShipIndex = Math.floor(Math.random() * this.settings.ships.length);
-                await this.loadShip(this.settings.ships[this.currentShipIndex]);
+                await this.loadCurrentModeContent();
                 this.scheduleNextShip();
             } else {
                 document.getElementById('ship-name').textContent = 'No ships configured';
@@ -248,6 +260,18 @@ class ShipsScreensaver {
 
         this.controls.enabled = orbitMode;
         this.controls.autoRotate = orbitMode && autoRotateEnabled;
+    }
+
+    isFlyingToastersMode() {
+        return (this.settings.cameraPattern || 'orbit') === 'toasters';
+    }
+
+    areShipListsEqual(firstList = [], secondList = []) {
+        if (firstList.length !== secondList.length) {
+            return false;
+        }
+
+        return firstList.every((ship, index) => ship === secondList[index]);
     }
 
     getEffectiveCameraDistance() {
@@ -324,6 +348,12 @@ class ShipsScreensaver {
     }
 
     updateCameraDistanceForShip({ animate = false } = {}) {
+        if (this.isFlyingToastersMode()) {
+            const distance = Math.max((this.settings.cameraDistance || 50) * 1.2, 60);
+            this.setCameraDistance(distance);
+            return;
+        }
+
         const targetDistance = this.getEffectiveCameraDistance();
         if (animate) {
             this.startCameraDistanceTransition(targetDistance);
@@ -362,6 +392,11 @@ class ShipsScreensaver {
                 this.camera.position.z = Math.sin(t * 1.0) * distance * 0.6;
                 this.camera.position.y = (distance * 0.2) + (Math.sin(t * 2.0) * distance * 0.12);
                 break;
+            case 'toasters':
+                this.camera.position.x = Math.sin(t * 0.18) * distance * 0.25;
+                this.camera.position.y = (distance * 0.12) + (Math.sin(t * 0.11) * distance * 0.08);
+                this.camera.position.z = distance * 0.95 + (Math.cos(t * 0.15) * distance * 0.08);
+                break;
             default:
                 break;
         }
@@ -393,6 +428,12 @@ class ShipsScreensaver {
     }
 
     async nextShip() {
+        if (this.isFlyingToastersMode()) {
+            await this.loadFlyingToastersWave();
+            this.scheduleNextShip();
+            return;
+        }
+
         const ships = this.settings.ships;
         if (!ships || ships.length < 2) return;
         this.currentShipIndex = this.getRandomShipIndex(ships, this.currentShipIndex);
@@ -431,36 +472,8 @@ class ShipsScreensaver {
         try {
             const previousShip = this.currentShip;
 
-            // Wrap loader in timeout to prevent preview from appearing permanently stuck.
-            const loadPromise = this.loader.loadAsync(modelUrl);
-            const timeoutPromise = new Promise((resolve, reject) => {
-                setTimeout(() => reject(new Error('Model load timeout')), 12000);
-            });
-            const gltf = await Promise.race([loadPromise, timeoutPromise]);
-            const model = gltf.scene;
-
-            // Scale and position the model
-            model.scale.set(10, 10, 10);
-            model.position.set(0, 0, 0);
-
-            // Re-center every model so camera patterns and dynamic fit use a stable origin.
-            const initialBox = new THREE.Box3().setFromObject(model);
-            const modelCenter = initialBox.getCenter(new THREE.Vector3());
-            model.position.sub(modelCenter);
-
-            const centeredBox = new THREE.Box3().setFromObject(model);
-            const centeredSphere = centeredBox.getBoundingSphere(new THREE.Sphere());
-            this.currentShipRadius = Number.isFinite(centeredSphere.radius) && centeredSphere.radius > 0
-                ? centeredSphere.radius
-                : 10;
-
-            // Enable shadows
-            model.traverse((child) => {
-                if (child.isMesh) {
-                    child.castShadow = true;
-                    child.receiveShadow = true;
-                }
-            });
+            const { model, radius } = await this.loadModelScene(modelUrl);
+            this.currentShipRadius = radius;
 
             this.scene.add(model);
             this.currentShip = model;
@@ -486,6 +499,207 @@ class ShipsScreensaver {
             if (this.shipTimer) clearTimeout(this.shipTimer);
             this.shipTimer = setTimeout(() => this.nextShip(), 2000);
         }
+    }
+
+    async loadModelScene(modelUrl) {
+        // Wrap loader in timeout to prevent preview from appearing permanently stuck.
+        const loadPromise = this.loader.loadAsync(modelUrl);
+        const timeoutPromise = new Promise((resolve, reject) => {
+            setTimeout(() => reject(new Error('Model load timeout')), 12000);
+        });
+        const gltf = await Promise.race([loadPromise, timeoutPromise]);
+        const model = gltf.scene;
+
+        // Scale and position the model
+        model.scale.set(10, 10, 10);
+        model.position.set(0, 0, 0);
+
+        // Re-center every model so camera patterns and dynamic fit use a stable origin.
+        const initialBox = new THREE.Box3().setFromObject(model);
+        const modelCenter = initialBox.getCenter(new THREE.Vector3());
+        model.position.sub(modelCenter);
+
+        const centeredBox = new THREE.Box3().setFromObject(model);
+        const centeredSphere = centeredBox.getBoundingSphere(new THREE.Sphere());
+        const radius = Number.isFinite(centeredSphere.radius) && centeredSphere.radius > 0
+            ? centeredSphere.radius
+            : 10;
+
+        // Enable shadows
+        model.traverse((child) => {
+            if (child.isMesh) {
+                child.castShadow = true;
+                child.receiveShadow = true;
+            }
+        });
+
+        return { model, radius };
+    }
+
+    getFlyingToastersShipCount() {
+        const ships = this.settings.ships || [];
+        if (ships.length <= 1) {
+            return ships.length;
+        }
+
+        const maxShips = Math.min(8, ships.length);
+        const minShips = Math.min(3, maxShips);
+        return THREE.MathUtils.randInt(minShips, maxShips);
+    }
+
+    clearFlyingShips() {
+        this.flyingShips.forEach((entry) => this.disposeShipModel(entry.model));
+        this.flyingShips = [];
+    }
+
+    async loadFlyingToastersWave() {
+        const ships = this.settings.ships || [];
+        if (ships.length === 0) {
+            if (this.currentShip) {
+                this.disposeShipModel(this.currentShip);
+                this.currentShip = null;
+            }
+            this.clearFlyingShips();
+            document.getElementById('ship-name').textContent = 'No ships configured';
+            return;
+        }
+
+        const loadToken = ++this.activeModeLoadToken;
+        const count = this.getFlyingToastersShipCount();
+        const selectedUrls = [...ships]
+            .sort(() => Math.random() - 0.5)
+            .slice(0, count);
+
+        const loadedEntries = [];
+        for (const modelUrl of selectedUrls) {
+            try {
+                const { model, radius } = await this.loadModelScene(modelUrl);
+                const laneHeight = THREE.MathUtils.randFloat(-24, 20);
+                const laneDepth = THREE.MathUtils.randFloat(-26, 12);
+                const speed = THREE.MathUtils.randFloat(6, 18) * (this.settings.rotationSpeed || 2) * 0.4;
+
+                model.position.set(
+                    THREE.MathUtils.randFloat(-120, 120),
+                    laneHeight,
+                    laneDepth
+                );
+
+                const shipScale = THREE.MathUtils.clamp(5 / Math.max(radius, 1), 0.65, 1.45);
+                model.scale.multiplyScalar(shipScale);
+
+                loadedEntries.push({
+                    model,
+                    modelUrl,
+                    laneHeight,
+                    laneDepth,
+                    speed,
+                    bobPhase: Math.random() * Math.PI * 2,
+                    bobAmount: THREE.MathUtils.randFloat(0.2, 1.1),
+                    yawSpeed: THREE.MathUtils.randFloat(0.2, 0.8),
+                    rollSpeed: THREE.MathUtils.randFloat(-0.35, 0.35),
+                });
+            } catch (error) {
+                console.error('Error loading ship for toasters mode:', error);
+            }
+        }
+
+        if (loadToken !== this.activeModeLoadToken) {
+            loadedEntries.forEach((entry) => this.disposeShipModel(entry.model));
+            return;
+        }
+
+        this.clearFlyingShips();
+        if (this.currentShip) {
+            this.disposeShipModel(this.currentShip);
+            this.currentShip = null;
+        }
+
+        loadedEntries.forEach((entry) => {
+            this.scene.add(entry.model);
+            this.setModelOpacity(entry.model, 1);
+        });
+
+        this.flyingShips = loadedEntries;
+
+        if (this.flyingShips.length === 0) {
+            document.getElementById('ship-name').textContent = 'Failed to load ship models';
+            return;
+        }
+
+        const shipNames = this.flyingShips
+            .slice(0, 3)
+            .map((entry) => this.resolveShipDisplayName(entry.modelUrl));
+        const extraCount = this.flyingShips.length - shipNames.length;
+        const summary = extraCount > 0
+            ? `${shipNames.join(', ')} +${extraCount} more`
+            : shipNames.join(', ');
+
+        document.getElementById('ship-name').textContent = `Formation (${this.flyingShips.length}): ${summary}`;
+        this.updateCameraDistanceForShip();
+    }
+
+    updateFlyingShips(deltaTimeMs) {
+        if (!this.isFlyingToastersMode() || this.flyingShips.length === 0) {
+            return;
+        }
+
+        const dt = deltaTimeMs / 1000;
+        const horizontalLimit = 135;
+
+        this.flyingShips.forEach((entry, index) => {
+            entry.model.position.x += entry.speed * dt;
+            entry.model.position.y = entry.laneHeight + (Math.sin(this.cameraAnimationTime + entry.bobPhase) * entry.bobAmount);
+            entry.model.position.z = entry.laneDepth + (Math.cos(this.cameraAnimationTime * 0.5 + entry.bobPhase) * 1.6);
+
+            entry.model.rotation.y += entry.yawSpeed * dt;
+            entry.model.rotation.z += entry.rollSpeed * dt;
+
+            if (entry.model.position.x > horizontalLimit) {
+                entry.model.position.x = -horizontalLimit - THREE.MathUtils.randFloat(0, 45);
+                entry.laneHeight = THREE.MathUtils.randFloat(-24, 20);
+                entry.laneDepth = THREE.MathUtils.randFloat(-26, 12);
+
+                // Small speed variance keeps the stream from syncing up.
+                const speedVariance = THREE.MathUtils.randFloat(0.9, 1.15);
+                entry.speed = THREE.MathUtils.clamp(entry.speed * speedVariance, 4, 28);
+                entry.bobPhase = (entry.bobPhase + (Math.PI / (index + 1))) % (Math.PI * 2);
+            }
+        });
+    }
+
+    async loadCurrentModeContent() {
+        if (this.isFlyingToastersMode()) {
+            await this.loadFlyingToastersWave();
+            return;
+        }
+
+        this.clearFlyingShips();
+
+        const ships = this.settings.ships || [];
+        if (ships.length === 0) {
+            if (this.currentShip) {
+                this.disposeShipModel(this.currentShip);
+                this.currentShip = null;
+            }
+            document.getElementById('ship-name').textContent = 'No ships configured';
+            return;
+        }
+
+        if (this.currentShipIndex < 0 || this.currentShipIndex >= ships.length) {
+            this.currentShipIndex = Math.floor(Math.random() * ships.length);
+        }
+
+        await this.loadShip(ships[this.currentShipIndex]);
+    }
+
+    async refreshModeContent() {
+        if (this.shipTimer) {
+            clearTimeout(this.shipTimer);
+            this.shipTimer = null;
+        }
+
+        await this.loadCurrentModeContent();
+        this.scheduleNextShip();
     }
 
     setModelOpacity(model, opacity) {
@@ -671,6 +885,7 @@ class ShipsScreensaver {
         if (this.currentShip) {
             this.disposeShipModel(this.currentShip);
         }
+        this.clearFlyingShips();
 
         // Dispose renderer
         if (this.renderer) {
@@ -695,6 +910,7 @@ class ShipsScreensaver {
 
         this.updateCameraDistanceTransition();
         this.updatePatternCamera(deltaTimeMs);
+        this.updateFlyingShips(deltaTimeMs);
 
         if (this.controls) {
             this.controls.update();

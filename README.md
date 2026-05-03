@@ -66,7 +66,7 @@ The app supports standard screensaver command-line modes:
 - Lighting intensity multiplier
 - Camera distance
 - Dynamic camera distance auto-fit
-- Camera pattern (`orbit`, `carousel`, `showcase`, `examine`)
+- Camera pattern (`orbit`, `carousel`, `showcase`, `examine`, `toasters`)
 - Auto-rotate toggle
 - Display duration per ship
 

@@ -70,6 +70,7 @@ Allowed values:
 - `carousel`
 - `showcase`
 - `examine`
+- `toasters` (multi-ship flyby mode with slow camera drift)
 
 ### `autoRotate` (boolean)
 
